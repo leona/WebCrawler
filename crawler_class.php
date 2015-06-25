@@ -10,13 +10,20 @@ class crawler {
     private $work_url;
     private $work_url_host;
     private $count;
+    private $condition;
     
-    public function __construct($url, $length) {
+    public function condition($condition = null) {
+        $this->condition = $condition;
+        
+        return $this;
+    }
+    
+    public function start($url, $length) {
         $this->load($url);
 
         for($i = 0; $i < $length;$i++) {
             if (empty($this->site_store[$i])) {
-                echo 'No more URLs found';
+                echo '<br>No more URLs found<br>';
                 break;
             }
   
@@ -40,7 +47,9 @@ class crawler {
             $href = parse_url($url);
 
             if ($href['host'] !== $this->work_url_parsed['host']) {
-                $this->site_store[] = $href['scheme'] . '://' . $href['host'];
+                $condition = $this->condition;
+                if ($condition == null || $condition($url))
+                    $this->site_store[] = $href['scheme'] . '://' . $href['host'];
             }
         }
     }
