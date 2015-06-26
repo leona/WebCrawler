@@ -1,24 +1,17 @@
 <?php
 namespace leonhardly;
-require('multi.php');
-
-use jonathonhill\Multiprocess;
 
 class crawler {
 
-    public $site_store = array();
-    private $work_array = array();
-    private $dom = array();
-    private $work_url = array();
-    private $work_url_host = array();
-    private $count;
-    private $iteration_count;
-    private $condition;
-    private $sites_crawled = array();
+    public $site_store      = array();
+    public $sites_crawled   = array();
+    public $dom             = array();
+    public $count           = 0;
+    public $iteration_count = 0;
+    public $condition;
 
     public function __construct() {
-        $this->iteration_count = 0;
-        $this->count = 0;
+
     }
 
     public function condition($condition = null) {
@@ -27,41 +20,43 @@ class crawler {
         return $this;
     }
 
-    public function start($url, $length) {
-        $this->processThread($url);
+    public function initiate($depth = 100, $callback) {
+        while($this->count < $depth) {
+            $callback($this);
+        }
+    }
 
-        do {
+    public function start($url, $length) {
+        $this->initThread($url);
+
+        while ($this->count < $length) {
             if (empty($this->site_store[$this->iteration_count])) {
                 echo '<br>No more URLs found<br>';
                 break;
             }
 
-            if ($this->iteration_count > 20 && $this->iteration_count <= $this->count - 20) {
+            $this->initThread($this->site_store[$this->iteration_count]);
 
-                $cut = array_slice($this->site_store, $this->iteration_count - 1);
-
-                (new Multiprocess($cut, function($value) {
-                    $this->processThread($value);
-                }))->run(20);
-            } else {
-
-                $this->processThread($this->site_store[$this->iteration_count]);
-            }
-        } while($this->count < $length);
-
-        $this->site_store = array_unique($this->site_store);
+            echo 'Site count: ' . $this->count . ' Iteration count: ' . $this->iteration_count . "\r\n";
+        }
+        file_put_contents('log.txt', print_r($this->site_store, true));
 
         return $this;
     }
 
-    public function processThread($value) {
+    private function cleanUp() {
+        $this->site_store = array_unique($this->site_store);
+    }
+
+
+    public function startThread($value) {file_put_contents('data_store', implode("\r\n", $this->site_store), FILE_APPEND);
         if (!in_array($value, $this->sites_crawled)) {
             $this->sites_crawled[] = $value;
-            $this->load($value);
+            $this->fetchDOM($value);
         }
     }
 
-    public function load($url) {
+    public function fetchDOM($url) {
         $this->iteration_count++;
 
         try {
@@ -76,18 +71,22 @@ class crawler {
             @$this->dom[$url]->loadHTML($this->html[$url]);
         } catch(Exception $e) {}
 
-        $this->loadURLs($url);
+        $this->parseLinks($url);
 
         return $this;
     }
 
-    private function loadURLs($url) {
-        $origin_host = parse_url($url)['host'];
+    private function parseLinks($url) {
+        $this->origin_host = parse_url($url)['host'];
+
         foreach($this->dom[$url]->getElementsByTagname('a') as $link) {
             $this->validateURL($link->getAttribute('href'), $origin_host);
         }
-
-        return $this->work_array;
+        $this->cleanUp();
+        
+        file_put_contents('data_store', implode("\r\n", $this->site_store), FILE_APPEND);
+        
+        return $this;
     }
 
     public function afterLoop($callback) {
@@ -110,6 +109,7 @@ class crawler {
                 $condition = $this->condition;
                 if ($condition == null || $condition($url)) {
                     $url = $href['scheme'] . '://' . $href['host'];
+
                     if (!in_array($url, $this->site_store)) {
                         $this->site_store[] = $url;
                         $this->count++;
